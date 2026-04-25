@@ -1,0 +1,38 @@
+ * Serving Flask app 'app'
+ * Debug mode: off
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://192.168.1.8:5001
+[33mPress CTRL+C to quit[0m
+127.0.0.1 - - [25/Apr/2026 17:47:46] "GET /api/health HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:47:49] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:47:50] "GET /api/tables?page_size=200 HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:47:51] "GET /api/table/dim_ec.dim_ec_user_da/subgraph?depth=3&direction=both HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:47:52] "GET /api/table/dim_ec.dim_ec_user_da/lineage HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:47:52] "GET /api/table/dim_ec.dim_ec_user_da/fields HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:47:52] "GET /api/job/10001 HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:00] "GET /api/table/tmp_ec.tmp_dim_ec_product_da/subgraph?depth=3&direction=both HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:00] "GET /api/table/tmp_ec.tmp_dim_ec_product_da/lineage HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:00] "GET /api/table/tmp_ec.tmp_dim_ec_product_da/fields HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:00] "GET /api/job/10002 HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:04] "GET /api/table/ods_ec.ods_ec_cart_di/subgraph?depth=3&direction=both HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:04] "GET /api/table/ods_ec.ods_ec_cart_di/lineage HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:04] "GET /api/table/ods_ec.ods_ec_cart_di/fields HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:04] "GET /api/job/10015 HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:05] "GET /api/table/kafka_stream.kafka_cart_log/subgraph?depth=3&direction=both HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:05] "GET /api/table/kafka_stream.kafka_cart_log/lineage HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:05] "GET /api/table/kafka_stream.kafka_cart_log/fields HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:09] "GET /api/table/dw_ec.dwd_ec_cart_basic_di/subgraph?depth=3&direction=both HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:09] "GET /api/table/dw_ec.dwd_ec_cart_basic_di/lineage HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:09] "GET /api/table/dw_ec.dwd_ec_cart_basic_di/fields HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:48:09] "GET /api/job/10035 HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:50:27] "GET /api/table/dw_ec.dwd_ec_cart_basic_di/field/order_status_desc/lineage HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:53:08] "GET /api/table/dw_ec.dwd_ec_cart_basic_di/field/order_status_desc/caliber HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:53:19] "GET /api/table/dw_ec.dwd_ec_cart_basic_di/field/actual_amount_clean/caliber HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:53:28] "GET /api/tables?page_size=200&layer=ads HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:53:29] "GET /api/table/app_ec.ads_ec_user_user_rfm_score_di/subgraph?depth=3&direction=both HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:53:29] "GET /api/table/app_ec.ads_ec_user_user_rfm_score_di/lineage HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:53:29] "GET /api/table/app_ec.ads_ec_user_user_rfm_score_di/fields HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:53:29] "GET /api/job/10074 HTTP/1.1" 200 -
+127.0.0.1 - - [25/Apr/2026 17:53:34] "GET /api/table/app_ec.ads_ec_user_user_rfm_score_di/field/recency_score/caliber HTTP/1.1" 200 -

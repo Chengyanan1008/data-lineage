@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>数据血缘系统</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ===== Header ===== */
+    .header { background: linear-gradient(135deg, #1a1f2e 0%, #16213e 100%); border-bottom: 1px solid #2d3748; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .header-logo { display: flex; align-items: center; gap: 10px; }
+    .header-logo .icon { width: 32px; height: 32px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .header-logo h1 { font-size: 18px; font-weight: 700; color: #fff; }
+    .header-stats { display: flex; gap: 24px; }
+    .stat-item { text-align: center; }
+    .stat-item .num { font-size: 18px; font-weight: 700; color: #667eea; }
+    .stat-item .lbl { font-size: 11px; color: #718096; }
+
+    /* ===== Layout ===== */
+    .main { display: flex; flex: 1; overflow: hidden; }
+    .sidebar { width: 280px; background: #1a1f2e; border-right: 1px solid #2d3748; display: flex; flex-direction: column; flex-shrink: 0; }
+    .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ===== Sidebar ===== */
+    .sidebar-header { padding: 16px; border-bottom: 1px solid #2d3748; }
+    .search-box { width: 100%; background: #0f1117; border: 1px solid #2d3748; border-radius: 8px; padding: 8px 12px; color: #e2e8f0; font-size: 13px; outline: none; }
+    .search-box:focus { border-color: #667eea; }
+    .filter-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .filter-btn { padding: 3px 10px; border-radius: 12px; border: 1px solid #2d3748; background: transparent; color: #a0aec0; cursor: pointer; font-size: 11px; transition: all .2s; }
+    .filter-btn:hover, .filter-btn.active { background: #667eea; color: #fff; border-color: #667eea; }
+
+    .table-list { flex: 1; overflow-y: auto; padding: 8px; }
+    .table-item { padding: 10px 12px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; margin-bottom: 2px; transition: all .15s; }
+    .table-item:hover { background: #2d3748; }
+    .table-item.active { background: #2d3748; border-color: #667eea; }
+    .table-item-name { font-size: 12px; font-weight: 600; color: #e2e8f0; word-break: break-all; }
+    .table-item-meta { display: flex; gap: 6px; margin-top: 4px; }
+    .layer-badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 600; }
+
+    /* ===== Canvas Area ===== */
+    .canvas-toolbar { background: #1a1f2e; border-bottom: 1px solid #2d3748; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .canvas-toolbar .title { font-size: 14px; font-weight: 600; color: #e2e8f0; flex: 1; }
+    .btn { padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; transition: all .2s; }
+    .btn-primary { background: #667eea; color: #fff; }
+    .btn-primary:hover { background: #5a6fd6; }
+    .btn-secondary { background: #2d3748; color: #a0aec0; }
+    .btn-secondary:hover { background: #3d4a5c; color: #e2e8f0; }
+    .btn-warning { background: #ed8936; color: #fff; }
+    .btn-warning:hover { background: #dd6b20; }
+    .btn-success { background: #48bb78; color: #fff; }
+    .btn-success:hover { background: #38a169; }
+
+    #lineage-svg { width: 100%; flex: 1; background: #0f1117; cursor: grab; }
+    #lineage-svg:active { cursor: grabbing; }
+    .canvas-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ===== Graph Nodes ===== */
+    .node-group { cursor: pointer; }
+    .node-rect { rx: 8; ry: 8; stroke-width: 2; transition: all .2s; }
+    .node-rect:hover { filter: brightness(1.2); }
+    .node-label { font-size: 11px; fill: #e2e8f0; font-weight: 600; pointer-events: none; }
+    .node-layer { font-size: 9px; fill: #a0aec0; pointer-events: none; }
+    .edge-path { fill: none; stroke-width: 2; marker-end: url(#arrow); opacity: 0.7; }
+    .edge-path:hover { opacity: 1; stroke-width: 3; }
+
+    /* ===== Bottom Panel ===== */
+    .bottom-panel { height: 0; transition: height .3s; overflow: hidden; background: #1a1f2e; border-top: 1px solid #2d3748; flex-shrink: 0; }
+    .bottom-panel.open { height: 340px; }
+    .panel-header { padding: 10px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #2d3748; }
+    .panel-tabs { display: flex; gap: 2px; }
+    .panel-tab { padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; color: #a0aec0; border: none; background: transparent; }
+    .panel-tab.active { background: #667eea; color: #fff; }
+    .panel-body { display: flex; height: calc(100% - 42px); overflow: hidden; }
+    .panel-section { flex: 1; overflow: auto; padding: 12px 16px; }
+    .panel-section + .panel-section { border-left: 1px solid #2d3748; }
+
+    /* ===== Code Viewer ===== */
+    .code-viewer { background: #0d1117; border-radius: 8px; overflow: auto; height: 100%; position: relative; }
+    .code-viewer pre { margin: 0; padding: 12px; font-size: 12px; line-height: 1.6; }
+    .code-viewer code { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+    .highlight-line { background: rgba(102, 126, 234, 0.2); display: block; }
+    .highlight-match { background: #667eea; color: #fff; border-radius: 2px; padding: 0 2px; }
+
+    /* ===== Field Panel ===== */
+    .fields-grid { display: grid; grid-template-columns: 1fr; gap: 6px; }
+    .field-item { background: #0f1117; border: 1px solid #2d3748; border-radius: 6px; padding: 8px 12px; cursor: pointer; transition: all .2s; }
+    .field-item:hover { border-color: #667eea; }
+    .field-item.active { border-color: #667eea; background: rgba(102,126,234,0.1); }
+    .field-name { font-size: 12px; font-weight: 700; color: #667eea; }
+    .field-expr { font-size: 11px; color: #718096; margin-top: 3px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .field-sources { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+    .field-source-tag { font-size: 10px; background: #2d3748; padding: 1px 6px; border-radius: 4px; color: #a0aec0; }
+
+    /* ===== Info Panel ===== */
+    .info-section { margin-bottom: 16px; }
+    .info-title { font-size: 11px; font-weight: 700; color: #667eea; text-transform: uppercase; margin-bottom: 8px; }
+    .info-row { display: flex; gap: 8px; margin-bottom: 6px; }
+    .info-label { font-size: 11px; color: #718096; min-width: 80px; }
+    .info-value { font-size: 11px; color: #e2e8f0; }
+    .table-list-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+    .table-tag { font-size: 10px; background: #2d3748; padding: 2px 8px; border-radius: 10px; color: #a0aec0; cursor: pointer; border: 1px solid transparent; }
+    .table-tag:hover { border-color: #667eea; color: #667eea; }
+
+    /* ===== Modal ===== */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 24px; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 12px; width: 900px; max-width: 100%; max-height: 85vh; display: flex; flex-direction: column; }
+    .modal-header { padding: 16px 20px; border-bottom: 1px solid #2d3748; display: flex; align-items: center; justify-content: space-between; }
+    .modal-title { font-size: 16px; font-weight: 700; color: #fff; }
+    .modal-close { background: #2d3748; border: none; color: #a0aec0; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+    .modal-close:hover { background: #3d4a5c; color: #fff; }
+    .modal-body { flex: 1; overflow: auto; padding: 20px; }
+
+    /* ===== Caliber Trace ===== */
+    .caliber-container { display: flex; flex-direction: column; gap: 16px; }
+    .caliber-layer-block { border-left: 3px solid; padding-left: 16px; }
+    .caliber-layer-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+    .caliber-table-entry { background: #0f1117; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+    .caliber-table-name { font-size: 13px; font-weight: 700; color: #e2e8f0; }
+    .caliber-field { font-size: 12px; color: #667eea; margin-top: 4px; }
+    .caliber-transform { font-family: monospace; font-size: 11px; color: #a0aec0; margin-top: 6px; background: #1a1f2e; padding: 6px 8px; border-radius: 4px; word-break: break-all; }
+    .caliber-job { font-size: 11px; color: #718096; margin-top: 4px; }
+
+    /* ===== Loading ===== */
+    .loading { display: flex; align-items: center; justify-content: center; height: 100%; }
+    .spinner { width: 36px; height: 36px; border: 3px solid #2d3748; border-top-color: #667eea; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ===== Empty ===== */
+    .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: #718096; }
+    .empty-icon { font-size: 48px; opacity: 0.4; }
+
+    /* ===== Layer Colors ===== */
+    .layer-ods  { background: #e53e3e20; color: #fc8181; border-color: #e53e3e; }
+    .layer-dim  { background: #ed893620; color: #fbd38d; border-color: #ed8936; }
+    .layer-dwd  { background: #38a16920; color: #9ae6b4; border-color: #38a169; }
+    .layer-dwa  { background: #3182ce20; color: #90cdf4; border-color: #3182ce; }
+    .layer-dws  { background: #80518820; color: #d6bcfa; border-color: #805188; }
+    .layer-ads  { background: #d6975320; color: #fcd34d; border-color: #d69753; }
+    .layer-da   { background: #e53e3e15; color: #feb2b2; border-color: #e53e3e70; }
+    .layer-tmp  { background: #71809620; color: #cbd5e0; border-color: #718096; }
+    .layer-unknown { background: #2d374820; color: #a0aec0; border-color: #4a5568; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1f2e; }
+    ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #667eea; }
+
+    /* ===== Tooltip ===== */
+    .tooltip { position: fixed; background: #2d3748; border: 1px solid #4a5568; border-radius: 6px; padding: 8px 12px; font-size: 11px; color: #e2e8f0; pointer-events: none; z-index: 999; max-width: 260px; display: none; }
+
+    .mini-legend { display: flex; gap: 10px; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+    /* ===== Field Caliber Modal ===== */
+    .fc-layout { display: flex; flex-direction: column; min-height: 500px; }
+    .fc-right { flex: 1; overflow: auto; padding: 24px 28px; }
+
+    /* ── 数据流向横向箭头区 ── */
+    .fc-flow-bar { background: #0f1117; border-radius: 10px; padding: 18px 20px; margin-bottom: 24px; }
+    .fc-flow-bar-title { font-size: 11px; font-weight: 700; color: #667eea; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; }
+    .fc-flow-arrows { display: flex; align-items: center; flex-wrap: wrap; gap: 0; }
+    .fc-flow-node { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 120px; max-width: 160px; }
+    .fc-flow-node-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; margin-bottom: 2px; }
+    .fc-flow-node-tbl { font-family: monospace; font-size: 11px; font-weight: 700; text-align: center; word-break: break-all; line-height: 1.3; }
+    .fc-flow-node-layer { font-size: 9px; color: #718096; }
+    .fc-flow-node-logic { font-size: 9px; color: #a0aec0; font-style: italic; text-align: center; max-width: 140px; }
+    .fc-flow-arrow { display: flex; align-items: center; padding: 0 4px; color: #4a5568; font-size: 18px; flex-shrink: 0; }
+    .fc-flow-arrow span { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .fc-flow-arrow-line { width: 28px; height: 2px; background: #4a5568; }
+    .fc-flow-arrow-head { color: #667eea; font-size: 14px; margin-left: -4px; }
+
+    /* ── 逐层说明表格 ── */
+    .fc-section-title { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #2d3748; }
+    .fc-section-title span { font-size: 11px; color: #718096; font-weight: 400; margin-left: 8px; }
+    .fc-table-wrap { overflow: auto; margin-bottom: 24px; }
+    .fc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .fc-table th { background: #1a1f2e; color: #a0aec0; font-weight: 600; font-size: 11px;
+                   padding: 8px 12px; text-align: left; border-bottom: 1px solid #2d3748;
+                   position: sticky; top: 0; z-index: 1; white-space: nowrap; }
+    .fc-table td { padding: 10px 12px; border-bottom: 1px solid #1a1f2e; vertical-align: top; }
+    .fc-table tr:hover td { background: #1a202c; }
+    .fc-table .layer-cell { font-weight: 700; font-size: 11px; white-space: nowrap; }
+    .fc-table .table-cell { font-family: monospace; font-size: 11px; }
+    .fc-table .table-cell a { color: #667eea; cursor: pointer; text-decoration: none; }
+    .fc-table .table-cell a:hover { text-decoration: underline; }
+    .fc-table .field-cell { color: #9ae6b4; font-family: monospace; font-size: 12px; font-weight: 700; }
+    .fc-table .logic-cell { color: #e2e8f0; line-height: 1.6; }
+    .fc-table .logic-cell code { background: #0f1117; padding: 2px 6px; border-radius: 3px;
+                                  font-size: 11px; color: #fbd38d; display: block; max-width: 420px;
+                                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                                  margin-top: 4px; }
+    .fc-table .logic-cell .logic-note { font-size: 11px; color: #718096; }
+    .fc-table .filter-cell { vertical-align: top; min-width: 160px; max-width: 260px; }
+    .fc-filter-list { display: flex; flex-direction: column; gap: 3px; }
+    .fc-filter-tag { display: flex; align-items: baseline; gap: 5px;
+                     background: #141e2d; border-left: 2px solid #2d4a6a;
+                     border-radius: 0 3px 3px 0; padding: 3px 7px;
+                     font-size: 10px; line-height: 1.5; }
+    .fc-filter-tag .ft-label { color: #63b3ed; font-weight: 700; white-space: nowrap;
+                                flex-shrink: 0; font-size: 9px; text-transform: uppercase;
+                                letter-spacing: .03em; }
+    .fc-filter-tag .ft-cond { color: #a0aec0; font-family: monospace;
+                               word-break: break-all; line-height: 1.4; }
+    .fc-filter-tag-warn { border-color: #c05621; background: #1a1008; }
+    .fc-filter-tag-warn .ft-label { color: #f6ad55; }
+    .fc-filter-tag-success { border-color: #276749; background: #081a10; }
+    .fc-filter-tag-success .ft-label { color: #68d391; }
+    .fc-filter-more { font-size: 10px; color: #667eea; cursor: pointer;
+                      padding: 1px 0; display: inline-block; user-select: none; }
+    .fc-filter-more:hover { text-decoration: underline; }
+    .fc-filter-hidden { display: none; }
+
+    /* ── 原始字段映射 & 关键过滤 ── */
+    .fc-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .fc-card { background: #0f1117; border-radius: 8px; padding: 14px 16px; }
+    .fc-card-title { font-size: 11px; font-weight: 700; color: #ed8936; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+    .fc-mapping-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 7px; font-size: 11px; }
+    .fc-mapping-arrow { color: #4a5568; flex-shrink: 0; padding-top: 1px; }
+    .fc-mapping-label { color: #718096; min-width: 90px; flex-shrink: 0; }
+    .fc-mapping-val { color: #e2e8f0; font-family: monospace; }
+    .fc-filter-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 7px; font-size: 11px; }
+    .fc-filter-badge { background: #1a365d40; border: 1px solid #3182ce60; border-radius: 3px;
+                       padding: 1px 6px; font-family: monospace; font-size: 10px; color: #90cdf4;
+                       flex-shrink: 0; white-space: nowrap; }
+    .fc-filter-desc { color: #a0aec0; line-height: 1.4; }
+
+    /* ── 负责人汇总 & 源头 ── */
+    .fc-bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .fc-owner-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .fc-owner-table th { color: #718096; font-weight: 600; padding: 5px 8px; text-align: left; border-bottom: 1px solid #2d3748; }
+    .fc-owner-table td { padding: 6px 8px; border-bottom: 1px solid #1a1f2e; color: #e2e8f0; }
+    .fc-owner-table td:first-child { font-weight: 700; }
+    .fc-source-tag { display: inline-block; background: #7b341e40; border: 1px solid #ed8936;
+                     border-radius: 4px; padding: 4px 10px; font-size: 11px; color: #fbd38d;
+                     font-family: monospace; margin: 3px; }
+    .fc-btn-viewsql { background: #2d3748; border: 1px solid #4a5568; color: #a0aec0;
+                      border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; margin-left: 6px; }
+    .fc-btn-viewsql:hover { border-color: #667eea; color: #667eea; }
+
+    /* direction button group */
+    #dir-group { display: none; }
+    #dir-group.visible { display: inline-flex !important; }
+    .dir-btn { font-size: 12px; padding: 4px 12px; border-radius: 4px; transition: all .15s; }
+    .dir-btn.active-dir { background: #667eea !important; color: #fff !important; }
+    .dir-btn:not(.active-dir) { background: transparent !important; color: #a0aec0 !important; }
+    .dir-btn:not(.active-dir):hover { background: #2d3748 !important; color: #e2e8f0 !important; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-logo">
+    <div class="icon">⚡</div>
+    <h1>数据血缘系统</h1>
+  </div>
+  <div class="header-stats" id="header-stats">
+    <div class="stat-item"><div class="num" id="stat-tables">-</div><div class="lbl">表总数</div></div>
+    <div class="stat-item"><div class="num" id="stat-edges">-</div><div class="lbl">血缘链路</div></div>
+    <div class="stat-item"><div class="num" id="stat-jobs">-</div><div class="lbl">任务数</div></div>
+  </div>
+  <div class="mini-legend" id="legend"></div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <input class="search-box" type="text" placeholder="搜索表名..." id="search-input" />
+      <div class="filter-row" id="layer-filters">
+        <button class="filter-btn active" data-layer="" onclick="setLayerFilter('', this)">全部</button>
+      </div>
+    </div>
+    <div class="table-list" id="table-list">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+    <div class="canvas-toolbar">
+      <div class="title" id="canvas-title">选择左侧表查看血缘关系</div>
+
+      <!-- direction toggle group -->
+      <div id="dir-group" style="background:#0f1117; border:1px solid #2d3748; border-radius:6px; padding:2px; gap:2px;">
+        <button class="btn btn-secondary dir-btn active-dir" id="btn-upstream"   onclick="setDirection('upstream')"   title="仅显示上游依赖链路">↑ 仅上游</button>
+        <button class="btn btn-primary  dir-btn"              id="btn-both"       onclick="setDirection('both')"       title="同时显示上下游">⇅ 上下游</button>
+        <button class="btn btn-secondary dir-btn"             id="btn-downstream" onclick="setDirection('downstream')" title="仅显示下游产出链路">↓ 仅下游</button>
+      </div>
+
+      <button class="btn btn-warning" id="btn-caliber" style="display:none" onclick="openCaliber()">追溯统计口径</button>
+      <button class="btn btn-success" id="btn-fields"  style="display:none" onclick="toggleFieldPanel()">字段血缘</button>
+      <button class="btn btn-secondary" id="btn-fit"   style="display:none" onclick="fitView()">适应视图</button>
+    </div>
+
+    <div class="canvas-area">
+      <div id="graph-container" style="flex:1; position:relative; overflow:hidden;">
+        <div class="empty-state" id="empty-hint">
+          <div class="empty-icon">🔍</div>
+          <div>从左侧选择一张表，查看数据血缘关系</div>
+        </div>
+        <svg id="lineage-svg" style="display:none;"></svg>
+      </div>
+    </div>
+
+    <!-- Bottom Panel -->
+    <div class="bottom-panel" id="bottom-panel">
+      <div class="panel-header">
+        <div class="panel-tabs" id="panel-tabs">
+          <button class="panel-tab active" onclick="switchTab('info')">表信息</button>
+          <button class="panel-tab" onclick="switchTab('fields')">字段血缘</button>
+          <button class="panel-tab" onclick="switchTab('code')">完整脚本</button>
+        </div>
+        <button class="btn btn-secondary" onclick="closePanel()" style="padding:3px 10px;margin-left:auto;">收起</button>
+      </div>
+      <div class="panel-body">
+        <div class="panel-section" id="panel-info"></div>
+        <div class="panel-section" id="panel-fields" style="display:none"></div>
+        <div class="panel-section" id="panel-code" style="display:none; max-width:60%;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<!-- Caliber Modal (table-level) -->
+<div class="modal-overlay" id="caliber-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="caliber-title">统计口径追溯</div>
+      <button class="modal-close" onclick="closeCaliber()">✕</button>
+    </div>
+    <div class="modal-body" id="caliber-body">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Field Caliber Modal (field-level lineage report) -->
+<div class="modal-overlay" id="field-caliber-modal">
+  <div class="modal" style="width:1000px;max-width:96vw;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="fc-title">字段口径追溯</div>
+        <div id="fc-subtitle" style="font-size:11px;color:#718096;margin-top:3px;font-family:monospace;"></div>
+      </div>
+      <button class="modal-close" onclick="closeFieldCaliber()">✕</button>
+    </div>
+    <div class="modal-body" id="fc-body" style="padding:0;">
+      <div class="loading" style="height:200px"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:5001/api';
+let currentTable = null;
+let currentField = null;
+let currentDirection = 'both';
+let graphData = null;
+let activeTab = 'info';
+let svgZoom = null;
+
+const LAYER_COLORS = {
+  ods:  { fill: '#742a2a', stroke: '#e53e3e', text: '#fc8181' },
+  dim:  { fill: '#7b341e', stroke: '#ed8936', text: '#fbd38d' },
+  dwd:  { fill: '#1c4532', stroke: '#38a169', text: '#9ae6b4' },
+  dwa:  { fill: '#1a365d', stroke: '#3182ce', text: '#90cdf4' },
+  dws:  { fill: '#44337a', stroke: '#805ad5', text: '#d6bcfa' },
+  ads:  { fill: '#7b341e', stroke: '#d69753', text: '#fcd34d' },
+  da:   { fill: '#742a2a', stroke: '#e57c7c', text: '#fca5a5' },
+  dm:   { fill: '#1a365d', stroke: '#4299e1', text: '#bee3f8' },
+  rpt:  { fill: '#44337a', stroke: '#9f7aea', text: '#e9d8fd' },
+  tmp:  { fill: '#2d3748', stroke: '#718096', text: '#cbd5e0' },
+  app:  { fill: '#1a3a2a', stroke: '#38b2ac', text: '#81e6d9' },
+  unknown: { fill: '#1a202c', stroke: '#4a5568', text: '#a0aec0' },
+};
+
+// ===================== Init =====================
+async function init() {
+  try {
+    const stats = await fetch(`${API}/stats`).then(r => r.json());
+    document.getElementById('stat-tables').textContent = stats.total_tables;
+    document.getElementById('stat-edges').textContent = stats.total_edges;
+    document.getElementById('stat-jobs').textContent = stats.total_jobs;
+
+    // Layer filters
+    const layers = Object.keys(stats.layer_distribution || {}).sort();
+    const filterRow = document.getElementById('layer-filters');
+    layers.forEach(layer => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-btn';
+      btn.dataset.layer = layer;
+      btn.textContent = `${layer}(${stats.layer_distribution[layer]})`;
+      btn.onclick = () => setLayerFilter(layer, btn);
+      filterRow.appendChild(btn);
+    });
+
+    // Legend
+    const legend = document.getElementById('legend');
+    Object.entries(LAYER_COLORS).slice(0, 8).forEach(([layer, colors]) => {
+      legend.innerHTML += `<div class="legend-item"><div class="legend-dot" style="background:${colors.stroke}"></div>${layer}</div>`;
+    });
+
+    loadTableList();
+  } catch (e) {
+    console.error('Init failed', e);
+  }
+}
+
+// ===================== Table List =====================
+let allTables = [];
+let layerFilter = '';
+let searchQuery = '';
+let searchDebounceTimer = null;
+
+async function loadTableList() {
+  // 每次都走 API，支持全量搜索
+  const params = new URLSearchParams({ page_size: 200 });
+  if (layerFilter) params.set('layer', layerFilter);
+  if (searchQuery) params.set('search', searchQuery);
+
+  const container = document.getElementById('table-list');
+  container.innerHTML = '<div class="loading" style="height:60px"><div class="spinner"></div></div>';
+
+  const res = await fetch(`${API}/tables?${params}`).then(r => r.json());
+  allTables = res.tables || [];
+  renderTableList(res.total);
+}
+
+function renderTableList(total) {
+  const container = document.getElementById('table-list');
+  if (allTables.length === 0) {
+    container.innerHTML = '<div style="color:#718096;text-align:center;padding:20px;font-size:12px;">无匹配结果</div>';
+    return;
+  }
+
+  const hint = total > allTables.length
+    ? `<div style="color:#718096;font-size:10px;text-align:center;padding:4px 8px;">显示前 ${allTables.length} 条，共 ${total} 张表</div>`
+    : '';
+
+  container.innerHTML = hint + allTables.map(t => `
+    <div class="table-item ${currentTable === t.id ? 'active' : ''}" onclick="selectTable('${escAttr(t.id)}')">
+      <div class="table-item-name">${escHtml(t.id)}</div>
+      <div class="table-item-meta">
+        <span class="layer-badge layer-${t.layer}">${t.layer}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function setLayerFilter(layer, btn) {
+  layerFilter = layerFilter === layer ? '' : layer;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  if (!layerFilter) {
+    document.querySelector('.filter-btn[data-layer=""]').classList.add('active');
+  } else {
+    btn.classList.add('active');
+  }
+  loadTableList();
+}
+
+document.getElementById('search-input').addEventListener('input', e => {
+  searchQuery = e.target.value.toLowerCase().trim();
+  // debounce 300ms
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => loadTableList(), 300);
+});
+
+// ===================== Select Table =====================
+async function selectTable(tableName) {
+  currentTable = tableName;
+  currentField = null;
+  renderTableList();
+
+  document.getElementById('canvas-title').textContent = `血缘图: ${tableName}`;
+  ['btn-caliber','btn-fields','btn-fit'].forEach(id => {
+    document.getElementById(id).style.display = '';
+  });
+  // 显示方向切换组，默认 both
+  currentDirection = 'both';
+  document.getElementById('dir-group').classList.add('visible');
+  updateDirButtons();
+
+  document.getElementById('empty-hint').style.display = 'none';
+  document.getElementById('lineage-svg').style.display = 'block';
+
+  await loadSubgraph(tableName);
+  await openTableInfo(tableName);
+}
+
+async function loadSubgraph(tableName) {
+  showLoading();
+  try {
+    const params = new URLSearchParams({ depth: 3, direction: currentDirection });
+    const data = await fetch(`${API}/table/${encodeURIComponent(tableName)}/subgraph?${params}`).then(r => r.json());
+    graphData = data;
+    renderGraph(data);
+    // 若节点被截断，在 toolbar 提示
+    const titleEl = document.getElementById('canvas-title');
+    if (data.truncated) {
+      titleEl.innerHTML = `血缘图: ${escHtml(tableName)} <span style="font-size:11px;color:#ed8936;font-weight:400;">(下游节点过多，已截取部分展示)</span>`;
+    } else {
+      titleEl.textContent = `血缘图: ${tableName}`;
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function setDirection(dir) {
+  currentDirection = dir;
+  updateDirButtons();
+  if (currentTable) loadSubgraph(currentTable);
+}
+
+function updateDirButtons() {
+  ['upstream', 'both', 'downstream'].forEach(d => {
+    const btn = document.getElementById('btn-' + (d === 'both' ? 'both' : d));
+    if (!btn) return;
+    btn.classList.toggle('active-dir', d === currentDirection);
+  });
+}
+
+function showLoading() {
+  const svg = document.getElementById('lineage-svg');
+  // clear
+  d3.select(svg).selectAll('*').remove();
+}
+
+// ===================== D3 Graph =====================
+function renderGraph(data) {
+  const svg = d3.select('#lineage-svg');
+  svg.selectAll('*').remove();
+
+  const container = document.getElementById('graph-container');
+  const W = container.clientWidth;
+  const H = container.clientHeight;
+
+  svg.attr('width', W).attr('height', H);
+
+  // Build dagre layout
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 100, marginx: 40, marginy: 40 });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  const nodeW = 180, nodeH = 50;
+
+  data.nodes.forEach(n => {
+    g.setNode(n.id, { label: n.id, width: nodeW, height: nodeH });
+  });
+
+  data.edges.forEach(e => {
+    // 过滤自环边
+    if (e.source === e.target) return;
+    if (g.node(e.source) && g.node(e.target)) {
+      g.setEdge(e.source, e.target, { id: e.id, job_name: e.job_name, script_type: e.script_type, job_id: e.job_id, direction: e.direction });
+    }
+  });
+
+  dagre.layout(g);
+
+  // Zoom
+  const zoomG = svg.append('g').attr('class', 'zoom-container');
+  svgZoom = d3.zoom().scaleExtent([0.1, 4]).on('zoom', (event) => {
+    zoomG.attr('transform', event.transform);
+  });
+  svg.call(svgZoom);
+
+  // Arrow markers (upstream=blue, downstream=green)
+  const defs = svg.append('defs');
+  [['arrow-up', '#667eea'], ['arrow-down', '#48bb78']].forEach(([id, color]) => {
+    defs.append('marker')
+      .attr('id', id).attr('viewBox', '0 -5 10 10')
+      .attr('refX', 8).attr('refY', 0)
+      .attr('markerWidth', 6).attr('markerHeight', 6)
+      .attr('orient', 'auto')
+      .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', color);
+  });
+
+  // Edges
+  g.edges().forEach(e => {
+    const edge = g.edge(e);
+    if (!edge.points) return;
+
+    // 颜色：上游边蓝色，下游边绿色
+    const edgeDir = edge.direction || 'upstream';
+    const edgeColor   = edgeDir === 'downstream' ? '#48bb78' : '#667eea';
+    const edgeHover   = edgeDir === 'downstream' ? '#38a169' : '#9f7aea';
+    const arrowId     = edgeDir === 'downstream' ? 'arrow-down' : 'arrow-up';
+
+    const pathData = d3.line().x(p => p.x).y(p => p.y).curve(d3.curveBasis)(edge.points);
+
+    zoomG.append('path')
+      .attr('class', 'edge-path')
+      .attr('d', pathData)
+      .attr('stroke', edgeColor)
+      .attr('marker-end', `url(#${arrowId})`)
+      .attr('data-job', edge.job_name || '')
+      .on('mouseover', function(event) {
+        const dirLabel = edgeDir === 'downstream' ? '下游' : '上游';
+        showTooltip(event, `${dirLabel}任务: ${edge.job_name || '未知'}<br/>类型: ${edge.script_type || ''}`);
+        d3.select(this).attr('stroke', edgeHover).attr('stroke-width', 3);
+      })
+      .on('mouseout', function() {
+        hideTooltip();
+        d3.select(this).attr('stroke', edgeColor).attr('stroke-width', 2);
+      })
+      .on('click', async () => {
+        if (edge.job_id) {
+          // 打开底部面板显示该任务的 SQL
+          const jobData = await fetch(`${API}/job/${edge.job_id}`).then(r => r.json());
+          renderCode(jobData.content || '', jobData.script_type || 'sql');
+          document.getElementById('bottom-panel').classList.add('open');
+          switchTab('code');
+          document.getElementById('canvas-title').textContent = `脚本: ${edge.job_name || edge.job_id}`;
+        }
+      });
+  });
+
+  // Nodes
+  g.nodes().forEach(nodeId => {
+    const node = g.node(nodeId);
+    if (!node) return;
+    const dataNode = data.nodes.find(n => n.id === nodeId);
+    if (!dataNode) return;
+
+    const layer = dataNode.layer || 'unknown';
+    const colors = LAYER_COLORS[layer] || LAYER_COLORS.unknown;
+    const isCenter = dataNode.is_center;
+
+    const g_node = zoomG.append('g')
+      .attr('class', 'node-group')
+      .attr('transform', `translate(${node.x - nodeW/2}, ${node.y - nodeH/2})`)
+      .on('click', () => selectTable(nodeId))
+      .on('mouseover', function(event) {
+        showTooltip(event, `<b>${nodeId}</b><br/>层级: ${layer}<br/>点击查看血缘`);
+        d3.select(this).select('.node-rect').attr('filter', 'brightness(1.3)');
+      })
+      .on('mouseout', function() {
+        hideTooltip();
+        d3.select(this).select('.node-rect').attr('filter', null);
+      });
+
+    // Shadow for center
+    if (isCenter) {
+      g_node.append('rect')
+        .attr('x', -3).attr('y', -3)
+        .attr('width', nodeW + 6).attr('height', nodeH + 6)
+        .attr('rx', 10).attr('ry', 10)
+        .attr('fill', 'none')
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 2)
+        .attr('opacity', 0.6);
+    }
+
+    g_node.append('rect')
+      .attr('class', 'node-rect')
+      .attr('width', nodeW).attr('height', nodeH)
+      .attr('fill', colors.fill)
+      .attr('stroke', isCenter ? '#fff' : colors.stroke)
+      .attr('stroke-width', isCenter ? 2.5 : 1.5)
+      .attr('rx', 8).attr('ry', 8);
+
+    // Layer indicator strip
+    g_node.append('rect')
+      .attr('x', 0).attr('y', 0)
+      .attr('width', 4).attr('height', nodeH)
+      .attr('fill', colors.stroke)
+      .attr('rx', 2);
+
+    // Table name (truncate)
+    const displayName = nodeId.length > 22 ? nodeId.slice(0, 20) + '…' : nodeId;
+    g_node.append('text')
+      .attr('class', 'node-label')
+      .attr('x', nodeW / 2 + 2).attr('y', nodeH / 2 - 4)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .text(displayName)
+      .attr('fill', colors.text);
+
+    // Layer badge
+    g_node.append('text')
+      .attr('class', 'node-layer')
+      .attr('x', nodeW - 8).attr('y', nodeH - 7)
+      .attr('text-anchor', 'end')
+      .text(layer)
+      .attr('fill', colors.stroke);
+
+    // Direction badge（非中心节点，在右上角显示 ↑上游 / ↓下游）
+    if (!isCenter && dataNode.direction !== 'center') {
+      const dirLabel = dataNode.direction === 'downstream' ? '↓' : '↑';
+      const dirColor = dataNode.direction === 'downstream' ? '#48bb78' : '#667eea';
+      g_node.append('text')
+        .attr('x', nodeW - 4).attr('y', 10)
+        .attr('text-anchor', 'end')
+        .attr('font-size', 9)
+        .attr('fill', dirColor)
+        .attr('opacity', 0.8)
+        .text(dirLabel);
+    }
+  });
+
+  // Fit view
+  setTimeout(() => fitView(), 100);
+}
+
+function fitView() {
+  if (!svgZoom) return;
+  const svg = d3.select('#lineage-svg');
+  const container = document.getElementById('graph-container');
+  const W = container.clientWidth;
+  const H = container.clientHeight;
+
+  const bbox = svg.select('.zoom-container').node()?.getBBox();
+  if (!bbox || bbox.width === 0) return;
+
+  const scale = Math.min(W / (bbox.width + 80), H / (bbox.height + 80), 1.5) * 0.9;
+  const tx = (W - bbox.width * scale) / 2 - bbox.x * scale;
+  const ty = (H - bbox.height * scale) / 2 - bbox.y * scale;
+
+  svg.transition().duration(500)
+    .call(svgZoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+}
+
+// ===================== Bottom Panel =====================
+async function openTableInfo(tableName) {
+  const panel = document.getElementById('bottom-panel');
+  panel.classList.add('open');
+
+  const res = await fetch(`${API}/table/${encodeURIComponent(tableName)}/lineage`).then(r => r.json());
+  const jobRes = await fetch(`${API}/table/${encodeURIComponent(tableName)}/fields`).then(r => r.json());
+
+  // Info tab
+  const jobs = res.produced_by_jobs || [];
+  let infoHtml = `
+    <div class="info-section">
+      <div class="info-title">表基本信息</div>
+      <div class="info-row"><span class="info-label">表名</span><span class="info-value">${tableName}</span></div>
+      <div class="info-row"><span class="info-label">数据层级</span><span class="info-value"><span class="layer-badge layer-${res.layer}">${res.layer || 'unknown'}</span></span></div>
+    </div>`;
+
+  if (jobs.length > 0) {
+    const job = jobs[0];
+    infoHtml += `
+    <div class="info-section">
+      <div class="info-title">生产任务</div>
+      <div class="info-row"><span class="info-label">任务名称</span><span class="info-value">${job.job_name}</span></div>
+      <div class="info-row"><span class="info-label">负责人</span><span class="info-value">${job.owner}</span></div>
+      <div class="info-row"><span class="info-label">脚本类型</span><span class="info-value">${job.script_type}</span></div>
+      <div class="info-row"><span class="info-label">工作流</span><span class="info-value">${job.flow_name}</span></div>
+    </div>`;
+
+    // Input tables
+    if (job.input_tables?.length > 0) {
+      infoHtml += `
+      <div class="info-section">
+        <div class="info-title">上游依赖表 (${job.input_tables.length})</div>
+        <div class="table-list-tags">
+          ${job.input_tables.map(t => `<span class="table-tag" onclick="selectTable('${t}')">${t}</span>`).join('')}
+        </div>
+      </div>`;
+    }
+  }
+
+  document.getElementById('panel-info').innerHTML = infoHtml;
+
+  // Fields tab
+  const fields = jobRes.fields || [];
+  let fieldsHtml = `<div class="fields-grid">`;
+  if (fields.length > 0) {
+    fields.forEach(f => {
+      const srcTags = f.source_fields?.map(sf => `<span class="field-source-tag">${sf.table ? sf.table + '.' : ''}${sf.field}</span>`).join('') || '';
+      fieldsHtml += `
+        <div class="field-item" onclick="selectField('${escAttr(f.field)}', '${escAttr(tableName)}', '${escAttr(f.job_id)}')">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="field-name">${escHtml(f.field)}</div>
+            <button class="fc-btn-viewsql" onclick="event.stopPropagation();openFieldCaliber('${escAttr(tableName)}','${escAttr(f.field)}')" title="追溯口径">追溯口径</button>
+          </div>
+          <div class="field-expr">${escHtml(f.expression || '')}</div>
+          <div class="field-sources">${srcTags}</div>
+        </div>`;
+    });
+  } else {
+    fieldsHtml += '<div style="color:#718096;font-size:12px;padding:8px;">暂未解析到字段血缘（非SQL脚本或未匹配）</div>';
+  }
+  fieldsHtml += '</div>';
+  document.getElementById('panel-fields').innerHTML = fieldsHtml;
+
+  // Code tab - load job content
+  if (jobs.length > 0) {
+    const jobDetail = await fetch(`${API}/job/${jobs[0].job_id}`).then(r => r.json());
+    renderCode(jobDetail.content || '', jobDetail.script_type || 'sql');
+  }
+
+  switchTab('info');
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.panel-tab').forEach((t, i) => {
+    t.classList.toggle('active', ['info','fields','code'][i] === tab);
+  });
+  document.getElementById('panel-info').style.display = tab === 'info' ? '' : 'none';
+  document.getElementById('panel-fields').style.display = tab === 'fields' ? '' : 'none';
+  document.getElementById('panel-code').style.display = tab === 'code' ? '' : 'none';
+  if (tab === 'code') {
+    document.getElementById('panel-code').style.maxWidth = '100%';
+    document.getElementById('panel-info').style.flex = '0';
+    document.getElementById('panel-fields').style.flex = '0';
+  } else {
+    document.getElementById('panel-info').style.flex = '';
+    document.getElementById('panel-fields').style.flex = '';
+    document.getElementById('panel-code').style.maxWidth = '60%';
+  }
+}
+
+function closePanel() {
+  document.getElementById('bottom-panel').classList.remove('open');
+}
+
+function toggleFieldPanel() {
+  const panel = document.getElementById('bottom-panel');
+  if (!panel.classList.contains('open')) {
+    panel.classList.add('open');
+  }
+  switchTab('fields');
+}
+
+// ===================== Field Selection =====================
+async function selectField(fieldName, tableName, jobId) {
+  currentField = fieldName;
+
+  // Highlight field item
+  document.querySelectorAll('.field-item').forEach(el => el.classList.remove('active'));
+  event?.target?.closest('.field-item')?.classList.add('active');
+
+  // Fetch field lineage
+  const res = await fetch(`${API}/table/${encodeURIComponent(tableName)}/field/${encodeURIComponent(fieldName)}/lineage`).then(r => r.json());
+
+  if (res.error) {
+    console.warn(res.error);
+    return;
+  }
+
+  // Render code with highlights
+  renderCodeWithHighlights(res.code || '', res.script_type || res.job?.script_type || 'sql', res.highlights || [], res.source_highlights || {});
+
+  // Switch to code tab
+  switchTab('code');
+}
+
+function renderCode(code, lang) {
+  const panel = document.getElementById('panel-code');
+  const highlighted = hljs.highlight(code, { language: mapLang(lang) }).value;
+  panel.innerHTML = `<div class="code-viewer"><pre><code class="hljs">${highlighted}</code></pre></div>`;
+}
+
+function renderCodeWithHighlights(code, lang, highlights, sourceHighlights) {
+  const panel = document.getElementById('panel-code');
+  const lines = code.split('\n');
+  const highlightLines = new Set((highlights || []).map(h => h.line));
+  const allHighlights = [...(highlights || [])];
+  Object.values(sourceHighlights).forEach(hs => allHighlights.push(...hs));
+
+  // Group by line
+  const lineHighlights = {};
+  allHighlights.forEach(h => {
+    if (!lineHighlights[h.line]) lineHighlights[h.line] = [];
+    lineHighlights[h.line].push(h);
+  });
+
+  let html = '<div class="code-viewer"><pre><code class="hljs">';
+  lines.forEach((line, idx) => {
+    const lineNum = idx + 1;
+    const isHighlight = highlightLines.has(lineNum);
+    const escapedLine = escHtml(line);
+    if (isHighlight) {
+      html += `<span class="highlight-line">${escapedLine}\n</span>`;
+    } else {
+      html += escapedLine + '\n';
+    }
+  });
+  html += '</code></pre></div>';
+  panel.innerHTML = html;
+
+  // Scroll to first highlight
+  if (highlights.length > 0) {
+    setTimeout(() => {
+      const highlighted = panel.querySelector('.highlight-line');
+      if (highlighted) highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  }
+}
+
+// ===================== Caliber Modal =====================
+async function openCaliber() {
+  if (!currentTable) return;
+  document.getElementById('caliber-modal').classList.add('open');
+  document.getElementById('caliber-title').textContent = `统计口径追溯：${currentTable}`;
+  document.getElementById('caliber-body').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  const res = await fetch(`${API}/table/${encodeURIComponent(currentTable)}/caliber`).then(r => r.json());
+  renderCaliberModal(res);
+}
+
+function closeCaliber() {
+  document.getElementById('caliber-modal').classList.remove('open');
+}
+
+// ===================== Field Caliber Modal =====================
+async function openFieldCaliber(tableName, fieldName) {
+  const modal = document.getElementById('field-caliber-modal');
+  modal.classList.add('open');
+  document.getElementById('fc-title').textContent = `${fieldName}  统计口径追溯`;
+  document.getElementById('fc-subtitle').textContent = `${tableName}.${fieldName}`;
+  document.getElementById('fc-body').innerHTML =
+    '<div class="loading" style="height:200px"><div class="spinner"></div></div>';
+
+  try {
+    const data = await fetch(
+      `${API}/table/${encodeURIComponent(tableName)}/field/${encodeURIComponent(fieldName)}/caliber`
+    ).then(r => r.json());
+    renderFieldCaliberModal(data);
+  } catch(e) {
+    document.getElementById('fc-body').innerHTML =
+      `<div style="padding:20px;color:#fc8181;">加载失败：${e.message}</div>`;
+  }
+}
+
+function closeFieldCaliber() {
+  document.getElementById('field-caliber-modal').classList.remove('open');
+}
+
+// 标签颜色映射
+const FILTER_LABEL_CLASS = {
+  '订单状态':   'fc-filter-tag-success',
+  '金额过滤':   'fc-filter-tag-warn',
+  '日期范围':   '',
+  'AppID 范围': '',
+  '排除测试数据': '',
+  '排除测试用户': '',
+  '排除删除记录': '',
+  '非空过滤':   'fc-filter-tag-warn',
+  '正数过滤':   'fc-filter-tag-warn',
+  '排除特定商品': '',
+};
+
+let _filterToggleId = 0;
+
+function renderFilterTags(filters) {
+  if (!filters || filters.length === 0) {
+    return '<span style="font-size:10px;color:#4a5568;">—</span>';
+  }
+
+  const SHOW_ALWAYS = 2;  // 始终展示前 N 条
+  const uid = ++_filterToggleId;
+
+  const makeTag = (f) => {
+    const cls = FILTER_LABEL_CLASS[f.label] ?? '';
+    return `<div class="fc-filter-tag ${cls}">
+      <span class="ft-label">${escHtml(f.label)}</span>
+      <span class="ft-cond">${escHtml(f.condition)}</span>
+    </div>`;
+  };
+
+  const visibleTags = filters.slice(0, SHOW_ALWAYS).map(makeTag).join('');
+  const hiddenTags  = filters.slice(SHOW_ALWAYS).map(makeTag).join('');
+  const extra       = filters.length - SHOW_ALWAYS;
+
+  let html = `<div class="fc-filter-list">${visibleTags}`;
+  if (extra > 0) {
+    html += `<div class="fc-filter-hidden" id="fc-fh-${uid}">${hiddenTags}</div>
+      <span class="fc-filter-more" onclick="toggleFilters('fc-fh-${uid}',this)">
+        +${extra} 条 ▾
+      </span>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function toggleFilters(id, el) {
+  const div = document.getElementById(id);
+  if (!div) return;
+  const hidden = div.classList.toggle('fc-filter-hidden');
+  el.textContent = hidden
+    ? `+${div.children.length} 条 ▾`
+    : '收起 ▴';
+}
+
+function renderFieldCaliberModal(data) {
+  const chain = data.chain || [];
+  const LAYER_COLORS_MAP = {
+    ods: '#e53e3e', dim: '#ed8936', dwd: '#38a169', dwa: '#3182ce',
+    dws: '#805ad5', ads: '#d69753', da: '#e57c7c', dm: '#4299e1',
+    rpt: '#9f7aea', tmp: '#718096', unknown: '#4a5568',
+  };
+
+  // 从源头到目标排序（step 降序 = 源头在前）
+  const orderedChain = [...chain].sort((a, b) => b.step - a.step);
+
+  // ── 1. 数据流向（横向箭头链路）──
+  let flowHtml = `<div class="fc-flow-bar">
+    <div class="fc-flow-bar-title">数据流向（简化版）</div>
+    <div class="fc-flow-arrows">`;
+
+  orderedChain.forEach((step, idx) => {
+    const color = LAYER_COLORS_MAP[step.layer] || '#4a5568';
+    const tblShort = step.table.includes('.') ? step.table.split('.').slice(-1)[0] : step.table;
+    const logicTag = step.logic_desc && step.logic_desc !== '直接透传' && step.logic_desc !== '直接透传（无字段级解析）'
+      ? step.logic_desc.split('；')[0].replace(/^(SUM聚合|SUM 聚合|空值处理|货币换算|字段映射|条件映射\(CASE WHEN\))：/, '').slice(0, 35)
+      : '';
+
+    if (idx > 0) {
+      flowHtml += `<div class="fc-flow-arrow">
+        <div style="display:flex;align-items:center;">
+          <div style="width:24px;height:2px;background:#4a5568;"></div>
+          <div style="color:#667eea;font-size:12px;margin-left:-1px;">▶</div>
+        </div>
+      </div>`;
+    }
+
+    flowHtml += `
+      <div class="fc-flow-node" onclick="scrollToChainRow(${step.step})" style="cursor:pointer;">
+        <div class="fc-flow-node-dot" style="border-color:${color};background:${color}40;"></div>
+        <div class="fc-flow-node-tbl" style="color:${color};">${escHtml(tblShort)}</div>
+        <div class="fc-flow-node-layer">${escHtml(step.layer_display)}</div>
+        ${logicTag ? `<div class="fc-flow-node-logic">[${escHtml(logicTag)}]</div>` : ''}
+      </div>`;
+  });
+
+  flowHtml += `</div></div>`;
+
+  // ── 2. 逐层说明表格 ──
+  let tableHtml = `
+    <div class="fc-section-title">逐层说明
+      <span>共 ${chain.length} 层 · 追溯到 ${data.source_tables?.join(', ') || '源头'}</span>
+    </div>
+    <div class="fc-table-wrap">
+    <table class="fc-table">
+      <thead>
+        <tr>
+          <th>层级</th>
+          <th>表</th>
+          <th>字段</th>
+          <th>处理逻辑</th>
+          <th>关键过滤条件</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  chain.forEach(step => {
+    const color = LAYER_COLORS_MAP[step.layer] || '#4a5568';
+    const rawLogic = step.logic_desc || '';
+    const expr = step.expression || '';
+    const exprShort = expr.length > 100 ? expr.slice(0, 100) + '…' : expr;
+
+    // 过滤掉纯"直接透传"，只保留有实质内容的部分
+    const logicParts = rawLogic
+      .split('；')
+      .filter(s => s && s !== '直接透传' && s !== '直接透传（无字段级解析）');
+    const logicMain = logicParts.join('；');
+
+    const showPassthrough = !logicMain;
+    const showExpr = expr && expr.toLowerCase() !== step.field.toLowerCase()
+      && expr !== `${step.field} as ${step.field}`;
+
+    tableHtml += `
+      <tr id="chain-row-${step.step}">
+        <td class="layer-cell" style="color:${color};">${escHtml(step.layer_display)}</td>
+        <td class="table-cell">
+          <a onclick="closeFieldCaliber();selectTable('${escAttr(step.table)}')" title="${escHtml(step.table)}">
+            ${escHtml(step.table)}
+          </a>
+          ${step.job_name ? `<br/><button class="fc-btn-viewsql" onclick="viewJobSql('${escAttr(step.job_id)}','${escAttr(step.job_name)}')">查看脚本</button>` : ''}
+        </td>
+        <td class="field-cell">${escHtml(step.field)}</td>
+        <td class="logic-cell">
+          ${logicMain ? `<div>${escHtml(logicMain)}</div>` : ''}
+          ${showExpr ? `<code title="${escHtml(expr)}">${escHtml(exprShort)}</code>` : ''}
+          ${showPassthrough && !showExpr ? '<span class="logic-note">直接透传</span>' : ''}
+        </td>
+        <td class="filter-cell">${renderFilterTags(step.filter_conditions || [])}</td>
+      </tr>`;
+  });
+
+  tableHtml += `</tbody></table></div>`;
+
+  // ── 3. 原始字段映射 & 关键过滤条件（从 chain 数据提取）──
+  const srcStep = orderedChain[0]; // 最上游一层
+  const tgtStep = orderedChain[orderedChain.length - 1]; // 目标层
+
+  // 提取各层的表达式用于映射展示
+  const mappingRows = orderedChain
+    .filter(s => {
+      const expr = (s.expression || '').toLowerCase();
+      return expr && expr !== s.field.toLowerCase() && expr !== `${s.field} as ${s.field}`;
+    });
+
+  // 提取 source_fields 中含有 table 信息的作为原始映射
+  const srcFields = [];
+  chain.forEach(step => {
+    (step.source_fields || []).forEach(sf => {
+      if (sf.table && sf.field && sf.table !== step.table) {
+        srcFields.push({ from_table: sf.table, from_field: sf.field, to_table: step.table, to_field: step.field });
+      }
+    });
+  });
+
+  let mappingHtml = `<div class="fc-two-col">
+    <div class="fc-card">
+      <div class="fc-card-title">原始字段映射</div>`;
+
+  if (srcFields.length > 0) {
+    srcFields.slice(0, 6).forEach(m => {
+      const fromShort = m.from_table.split('.').pop();
+      mappingHtml += `
+        <div class="fc-mapping-row">
+          <span class="fc-mapping-label" style="color:#718096;">${escHtml(fromShort)}.${escHtml(m.from_field)}</span>
+          <span class="fc-mapping-arrow">→</span>
+          <span class="fc-mapping-val">${escHtml(m.to_field)}</span>
+        </div>`;
+    });
+  } else if (mappingRows.length > 0) {
+    mappingRows.slice(0, 5).forEach(s => {
+      const tblShort = s.table.split('.').pop();
+      const exprTrim = (s.expression || '').replace(/\s+as\s+\w+$/i, '').trim().slice(0, 60);
+      mappingHtml += `
+        <div class="fc-mapping-row">
+          <span class="fc-mapping-label" style="color:#718096;">${escHtml(tblShort)}</span>
+          <span class="fc-mapping-arrow">→</span>
+          <span class="fc-mapping-val">${escHtml(exprTrim)}</span>
+        </div>`;
+    });
+  } else {
+    mappingHtml += `<div style="font-size:11px;color:#718096;">字段同名透传，无转换逻辑</div>`;
+  }
+
+  // 汇率来源（如果有 dim 层）
+  const hasDim = chain.some(s => s.layer === 'dim');
+  if (hasDim) {
+    const dimStep = chain.find(s => s.layer === 'dim');
+    mappingHtml += `
+      <div class="fc-mapping-row" style="margin-top:8px;padding-top:8px;border-top:1px solid #2d3748;">
+        <span class="fc-mapping-label" style="color:#ed8936;">汇率来源</span>
+        <span class="fc-mapping-arrow">→</span>
+        <span class="fc-mapping-val">${escHtml(dimStep?.table || 'dim层')}<br/><span style="color:#718096;font-size:10px;">（前一日更新）</span></span>
+      </div>`;
+  }
+
+  mappingHtml += `</div>`;
+
+  // 关键过滤条件：从各层 logic_desc 中提取关键词
+  mappingHtml += `<div class="fc-card">
+    <div class="fc-card-title">关键过滤 / 聚合条件</div>`;
+
+  const filterItems = [];
+  chain.forEach(step => {
+    const logic = step.logic_desc || '';
+    const expr  = step.expression || '';
+    const layerShort = step.layer_display.replace(/（.*?）/, '').trim();
+
+    // SUM 聚合
+    if (/SUM\s*聚合/i.test(logic) || /\bsum\s*\(/i.test(expr)) {
+      filterItems.push({ badge: 'SUM 聚合', desc: `${layerShort}：${expr.slice(0, 60)}` });
+    }
+    // CASE WHEN
+    if (/条件映射/i.test(logic) || /\bcase\s+when\b/i.test(expr)) {
+      filterItems.push({ badge: 'CASE WHEN', desc: `${layerShort}：条件分层/过滤` });
+    }
+    // 货币换算
+    if (/货币换算/i.test(logic) || /exchange|cny|usd/i.test(expr)) {
+      filterItems.push({ badge: '货币换算', desc: `${layerShort}：多币种统一为 CNY` });
+    }
+    // 空值处理
+    if (/空值处理/i.test(logic) || /\b(nvl|coalesce|ifnull)\s*\(/i.test(expr)) {
+      filterItems.push({ badge: 'NVL/空值', desc: `${layerShort}：${expr.slice(0,50)}` });
+    }
+  });
+
+  // 从 logic_desc 中手动提取过滤描述文字（含"过滤"的行）
+  chain.forEach(step => {
+    const logic = step.logic_desc || '';
+    if (logic.includes('过滤') || logic.includes('仅保留') || logic.includes('only')) {
+      const desc = logic.split('；').find(p => p.includes('过滤') || p.includes('仅保留'));
+      if (desc) filterItems.push({ badge: '过滤', desc: `${step.layer_display}：${desc.slice(0,60)}` });
+    }
+  });
+
+  const uniqueFilters = filterItems.filter((v,i,a) => a.findIndex(t=>t.badge===v.badge&&t.desc===v.desc)===i);
+
+  if (uniqueFilters.length > 0) {
+    uniqueFilters.slice(0, 6).forEach(f => {
+      mappingHtml += `
+        <div class="fc-filter-row">
+          <span class="fc-filter-badge">${escHtml(f.badge)}</span>
+          <span class="fc-filter-desc">${escHtml(f.desc)}</span>
+        </div>`;
+    });
+  } else {
+    mappingHtml += `<div style="font-size:11px;color:#718096;">无额外过滤条件</div>`;
+  }
+
+  mappingHtml += `</div></div>`;
+
+  // ── 4. 负责人汇总 & 原始来源 ──
+  let bottomHtml = `<div class="fc-bottom-row">`;
+
+  // 负责人表
+  const owners = [];
+  const seenJobs = new Set();
+  chain.forEach(step => {
+    if (step.job_name && step.job_owner && !seenJobs.has(step.job_id)) {
+      seenJobs.add(step.job_id);
+      owners.push({ layer: step.layer_display.replace(/（.*?）/, '').trim(), job: step.job_name, owner: step.job_owner });
+    }
+  });
+
+  bottomHtml += `<div class="fc-card">
+    <div class="fc-card-title">负责人</div>
+    <table class="fc-owner-table">
+      <thead><tr><th>层级</th><th>任务名</th><th>负责人</th></tr></thead>
+      <tbody>`;
+  owners.forEach(o => {
+    bottomHtml += `<tr>
+      <td>${escHtml(o.layer)}</td>
+      <td style="font-family:monospace;font-size:10px;color:#a0aec0;">${escHtml(o.job)}</td>
+      <td style="color:#667eea;">${escHtml(o.owner)}</td>
+    </tr>`;
+  });
+  bottomHtml += `</tbody></table></div>`;
+
+  // 原始来源
+  bottomHtml += `<div class="fc-card">
+    <div class="fc-card-title">原始来源（最终源头）</div>`;
+  if (data.source_tables?.length > 0) {
+    data.source_tables.forEach(t => {
+      bottomHtml += `<span class="fc-source-tag">${escHtml(t)}</span>`;
+    });
+  }
+  if (srcStep) {
+    const srcLogic = srcStep.logic_desc && srcStep.logic_desc !== '直接透传'
+      ? srcStep.logic_desc.split('；')[0] : '';
+    if (srcLogic) {
+      bottomHtml += `<div style="font-size:11px;color:#a0aec0;margin-top:10px;">${escHtml(srcLogic)}</div>`;
+    }
+    if (srcStep.job_name) {
+      bottomHtml += `<div style="font-size:11px;color:#718096;margin-top:6px;">采集任务：${escHtml(srcStep.job_name)}</div>`;
+    }
+  }
+  bottomHtml += `</div></div>`;
+
+  // ── 组合全部内容 ──
+  document.getElementById('fc-body').innerHTML = `
+    <div class="fc-layout">
+      <div class="fc-right">
+        ${flowHtml}
+        ${tableHtml}
+        ${mappingHtml}
+        ${bottomHtml}
+      </div>
+    </div>`;
+}
+
+function scrollToChainRow(step) {
+  const row = document.getElementById(`chain-row-${step}`);
+  if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function viewJobSql(jobId, jobName) {
+  if (!jobId) return;
+  const jobData = await fetch(`${API}/job/${jobId}`).then(r => r.json());
+  renderCode(jobData.content || '', jobData.script_type || 'sql');
+  document.getElementById('bottom-panel').classList.add('open');
+  switchTab('code');
+  document.getElementById('canvas-title').textContent = `脚本: ${jobName || jobId}`;
+}
+
+document.getElementById('field-caliber-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeFieldCaliber();
+});
+
+function renderCaliberModal(data) {
+  const upstreamLayers = data.upstream_summary?.layers || {};
+  const fields = data.fields || [];
+  const caliberText = data.caliber_text || '';
+
+  // Build layer hierarchy visualization
+  const LAYER_CHAIN = ['ods', 'dim', 'dwd', 'dwa', 'dws', 'ads', 'da', 'dm', 'rpt', 'tmp', 'unknown'];
+  const layerBorderColors = {
+    ods: '#e53e3e', dim: '#ed8936', dwd: '#38a169', dwa: '#3182ce',
+    dws: '#805ad5', ads: '#d69753', da: '#e57c7c', tmp: '#718096',
+    unknown: '#4a5568',
+  };
+
+  let html = `
+    <div style="margin-bottom:20px; background:#0f1117; border-radius:8px; padding:16px;">
+      <pre style="font-size:12px; color:#a0aec0; white-space:pre-wrap; font-family:monospace;">${escHtml(caliberText)}</pre>
+    </div>
+    <div style="font-size:14px; font-weight:700; color:#fff; margin-bottom:16px;">数据层级链路</div>
+    <div class="caliber-container">`;
+
+  // Current table
+  html += `
+    <div class="caliber-layer-block" style="border-color: ${layerBorderColors[data.layer] || '#4a5568'}">
+      <div class="caliber-layer-title" style="color:${layerBorderColors[data.layer] || '#a0aec0'}">
+        [${(data.layer || 'unknown').toUpperCase()}] 当前表
+      </div>
+      <div class="caliber-table-entry">
+        <div class="caliber-table-name">${data.table}</div>
+        <div style="font-size:11px; color:#718096; margin-top:4px;">字段数量: ${fields.length}</div>
+      </div>
+    </div>`;
+
+  // Upstream layers (ordered)
+  LAYER_CHAIN.forEach(layer => {
+    const tbls = upstreamLayers[layer] || [];
+    if (tbls.length === 0 || layer === data.layer) return;
+
+    html += `
+    <div class="caliber-layer-block" style="border-color:${layerBorderColors[layer] || '#4a5568'}">
+      <div class="caliber-layer-title" style="color:${layerBorderColors[layer] || '#a0aec0'}">
+        [${layer.toUpperCase()}] 上游依赖 (${tbls.length}张表)
+      </div>`;
+
+    tbls.forEach(tbl => {
+      html += `
+      <div class="caliber-table-entry">
+        <div class="caliber-table-name">${tbl}</div>
+        <div style="font-size:11px;color:#718096;margin-top:2px;">数据层: ${layer}</div>
+      </div>`;
+    });
+    html += '</div>';
+  });
+
+  // Field calibers
+  if (fields.length > 0) {
+    html += `
+    <div style="margin-top:20px;">
+      <div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:12px;">字段口径明细 (前20个)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">`;
+
+    fields.slice(0, 20).forEach(f => {
+      const srcStr = (f.source_fields || []).map(sf => `${sf.table ? sf.table+'.' : ''}${sf.field}`).join(', ');
+      html += `
+        <div class="caliber-table-entry" style="cursor:pointer" onclick="closeCaliber();selectField('${f.field}','${data.table}','')">
+          <div class="caliber-field">${f.field}</div>
+          <div class="caliber-transform">${escHtml(f.expression || f.field)}</div>
+          ${srcStr ? `<div class="caliber-job">来源: ${srcStr}</div>` : ''}
+        </div>`;
+    });
+
+    html += '</div></div>';
+  }
+
+  html += '</div>';
+  document.getElementById('caliber-body').innerHTML = html;
+}
+
+// ===================== Tooltip =====================
+function showTooltip(event, html) {
+  const tt = document.getElementById('tooltip');
+  tt.innerHTML = html;
+  tt.style.display = 'block';
+  tt.style.left = (event.pageX + 12) + 'px';
+  tt.style.top = (event.pageY - 10) + 'px';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+}
+
+// ===================== Utilities =====================
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escAttr(str) {
+  // 用于 onclick="selectTable('...')" 里的值，只转义单引号
+  return String(str).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+
+function mapLang(type) {
+  const map = { bash: 'bash', shell: 'bash', python: 'python', spark: 'python', hive_sql: 'sql', sql: 'sql' };
+  return map[type] || 'sql';
+}
+
+// Click outside modal to close
+document.getElementById('caliber-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeCaliber();
+});
+
+// ===================== Start =====================
+// hljs is loaded from CDN with separate language files
+init();
+</script>
+</body>
+</html>
