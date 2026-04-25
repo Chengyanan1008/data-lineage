@@ -1,11 +1,20 @@
 # Data-Lineage: 简化血缘 API 使用指南
 
+
 本项目提供一个最小化的数据血缘验证入口，聚焦于简化的血缘关系查询，不依赖 DolphinScheduler/CI/CD。核心能力是通过后端提供的简化血缘接口 /api/simple_lineage，快速查看指定表的上下游血缘关系，便于教育、原型验证和内部演示。
+<img width="1512" height="828" alt="image" src="https://github.com/user-attachments/assets/5cf71d0c-5a2c-42bf-8159-01e38e1b7447" />
+
 
 核心能力
 - 简化血缘查询：给定一个表名，返回该表的上游和下游血缘边与节点的简化视图。
 - 无需配置 CI/CD、DolphinScheduler，直接在本地后端环境中运行测试。
 - 支持 depth 参数，控制向上/向下遍历的层级深度。
+
+<img width="1367" height="670" alt="image" src="https://github.com/user-attachments/assets/49875d61-5a7e-4674-b1bd-7a327d7c32c5" />
+
+<img width="620" height="321" alt="image" src="https://github.com/user-attachments/assets/d407c0be-69b9-4920-b984-d476b7ac5924" />
+
+<img width="993" height="411" alt="image" src="https://github.com/user-attachments/assets/6250ae96-af10-4200-903b-531b10497b6a" />
 
 部署与测试
 - 依赖：Python3、Flask 等基础依赖。后端已包含一个 start.sh 脚本用于快速启动。
